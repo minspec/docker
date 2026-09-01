@@ -1,0 +1,46 @@
+# MinSpec local forge lane: Gitea, with an act_runner behind a profile.
+#
+# This starts the local CI muscle first; the application runtime wrapper
+# (Caddy, Mercure, the Raddy migration) arrives separately. Images are
+# version-pinned — bump deliberately, never track latest.
+#
+# Ports are offset (+300/+3300) so this lane coexists with the
+# maintainer's other local Gitea lane.
+#
+#   docker compose up -d                # Gitea only, http://localhost:3300
+#   # then: Gitea admin -> Actions -> Runners -> create registration token
+#   export GITEA_RUNNER_REGISTRATION_TOKEN=...
+#   docker compose --profile runner up -d
+services:
+  gitea:
+    image: gitea/gitea:1.24
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__server__ROOT_URL=http://localhost:3300/
+    volumes:
+      - gitea-data:/data
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3300:3000"
+      - "3322:22"
+    restart: unless-stopped
+
+  runner:
+    image: gitea/act_runner:0.2.13
+    profiles: [runner]
+    depends_on:
+      - gitea
+    environment:
+      - GITEA_INSTANCE_URL=http://gitea:3000
+      - GITEA_RUNNER_REGISTRATION_TOKEN=${GITEA_RUNNER_REGISTRATION_TOKEN:-}
+      - GITEA_RUNNER_NAME=minspec-local
+    volumes:
+      - runner-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  gitea-data:
+  runner-data:
